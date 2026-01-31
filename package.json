@@ -1,0 +1,12 @@
+{
+  "name": "jindam-dosirak-order",
+  "version": "1.0.0",
+  "description": "진담도시락 온라인 주문 시스템",
+  "scripts": {
+    "dev": "python -m http.server 8000",
+    "build": "echo 'No build needed - static HTML'"
+  },
+  "keywords": ["dosirak", "order", "food"],
+  "author": "가이오푸드",
+  "license": "MIT"
+}
