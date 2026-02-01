@@ -1322,7 +1322,11 @@ async function saveCompanyToSheet(companyData) {
                 <!-- 배송 날짜 선택 -->
                 <div class="section">
                     <div class="section-title">📅 배송 날짜 선택</div>
-                    <div class="calendar-header" id="calendarHeader"></div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                        <button onclick="changeMonth(-1)" style="background: #f5f5f5; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: 600; color: #666;">‹</button>
+                        <div class="calendar-header" id="calendarHeader" style="flex: 1; text-align: center;"></div>
+                        <button onclick="changeMonth(1)" style="background: #f5f5f5; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: 600; color: #666;">›</button>
+                    </div>
                     <div class="weekdays">
                         <div class="weekday">일</div>
                         <div class="weekday">월</div>
@@ -1860,6 +1864,7 @@ async function saveCompanyToSheet(companyData) {
     <script>
         let selectedDate = null;
         let quantities = { warm: 0, salad: 0, ilpoom: 0, heating: 0 };
+        let currentDisplayMonth = new Date(); // 캘린더에 표시 중인 월
         
         // 기본 단가 (안내용)
         const defaultPrices = { warm: 7500, salad: 7500, ilpoom: 7500, heating: 8000 };
@@ -1886,6 +1891,37 @@ async function saveCompanyToSheet(companyData) {
         let consultRequests = JSON.parse(localStorage.getItem('jindamConsultRequests')) || [];
         let currentCompany = null; // 현재 로그인한 업체 정보
         let isAdmin = false; // 관리자 여부
+        
+        // ============================================
+        // 초기 테스트 계정 자동 생성 (최초 1회만)
+        // ============================================
+        if (registeredCompanies.length === 0) {
+            console.log('🔧 초기 테스트 계정 생성 중...');
+            const testAccount = {
+                id: Date.now(),
+                company: '테스트업체',
+                name: '테스트업체',
+                phone: '15444679',
+                manager: '01012345678',
+                managerPhone: '01012345678',
+                address: '부산시 연제구 중앙대로 1060-1',
+                paymentMethod: 'bank',
+                businessNumber: '123-45-67890',
+                prices: {
+                    warm: 7500,
+                    salad: 7500,
+                    ilpoom: 7500,
+                    heating: 8000
+                },
+                registeredAt: new Date().toISOString()
+            };
+            registeredCompanies.push(testAccount);
+            localStorage.setItem('jindamCompanies', JSON.stringify(registeredCompanies));
+            console.log('✅ 테스트 계정 생성 완료!');
+            console.log('   로그인 번호: 15444679 또는 01012345678');
+        }
+        
+        console.log('📋 시스템 시작 - 등록된 업체:', registeredCompanies.length, '개');
 
         const menuNames = {
             warm: '보온도시락',
@@ -2011,19 +2047,31 @@ async function saveCompanyToSheet(companyData) {
             // 정식 업체로 등록 (결제 방법 포함)
             const newCompany = {
                 id: Date.now(),
-                name: request.company,
+                company: request.company,  // company 필드 추가
+                name: request.company,     // name 필드도 유지 (호환성)
                 phone: request.phone,
                 manager: request.manager,
+                managerPhone: request.manager,  // 담당자 연락처도 저장
                 address: request.address,
                 paymentMethod: request.paymentMethod || 'bank',
                 businessNumber: request.businessNumber || "",
+                prices: {  // 기본 가격 추가
+                    warm: 7500,
+                    salad: 7500,
+                    ilpoom: 7500,
+                    heating: 8000
+                },
                 registeredAt: request.approvedAt
             };
             
+            console.log('✅ 새 업체 등록:', newCompany);
             registeredCompanies.push(newCompany);
             
             localStorage.setItem('jindamConsultRequests', JSON.stringify(consultRequests));
             localStorage.setItem('jindamCompanies', JSON.stringify(registeredCompanies));
+            
+            console.log('✅ localStorage 저장 완료');
+            console.log('등록된 업체 수:', registeredCompanies.length);
             
             // Google Sheets에도 저장
             saveCompanyToSheet(newCompany);
@@ -2620,23 +2668,18 @@ async function saveCompanyToSheet(companyData) {
             const tomorrow = new Date(today);
             tomorrow.setDate(today.getDate() + 1);
             
-            // 오늘 배송: 오늘 오전 6시까지만 가능
+            // 오늘 배송: 오늘 오전 9시까지만 가능 (보온/발열 도시락)
             if (target.getTime() === today.getTime()) {
-                if (now.getHours() >= 6) return false;
+                if (now.getHours() >= 9) return false;
                 return true;
             }
             
-            // 내일 배송: 내일 오전 6시까지 가능 (보온/발열) 또는 오늘 오후 6시까지 (샐러드/일품)
-            // 일단 기본적으로는 내일 오전 6시까지 주문 가능
+            // 내일 배송: 오늘 오후 6시까지 가능
             if (target.getTime() === tomorrow.getTime()) {
-                // 내일 오전 6시 = 지금부터 계산
-                const tomorrowMorning6 = new Date(tomorrow);
-                tomorrowMorning6.setHours(6, 0, 0, 0);
-                
-                if (now < tomorrowMorning6) {
-                    return true; // 내일 오전 6시 이전이면 주문 가능
+                if (now.getHours() >= 18) {
+                    return false;
                 }
-                return false;
+                return true;
             }
             
             // 모레 이후: 모두 가능
@@ -3682,8 +3725,10 @@ async function saveCompanyToSheet(companyData) {
             const calendarDays = document.getElementById('calendarDays');
             const calendarHeader = document.getElementById('calendarHeader');
             const today = new Date();
-            const year = today.getFullYear();
-            const month = today.getMonth();
+            today.setHours(0, 0, 0, 0);
+            
+            const year = currentDisplayMonth.getFullYear();
+            const month = currentDisplayMonth.getMonth();
             
             calendarHeader.textContent = `${year}년 ${month + 1}월`;
             
@@ -3718,7 +3763,14 @@ async function saveCompanyToSheet(companyData) {
                 }
                 
                 if (!isCurrentMonth) {
-                    dayElement.classList.add('disabled');
+                    // 표시 중인 월이 아닌 날짜들
+                    dayElement.style.color = '#ddd';  // 연하게 표시
+                    if (!isPast && canOrder) {
+                        // 미래 날짜면 선택 가능
+                        dayElement.onclick = () => selectDate(currentDate);
+                    } else {
+                        dayElement.classList.add('disabled');
+                    }
                 } else if (isPast || !canOrder) {
                     dayElement.classList.add('disabled');
                     if (!isPast && !canOrder) {
@@ -3743,6 +3795,12 @@ async function saveCompanyToSheet(companyData) {
                 
                 calendarDays.appendChild(dayElement);
             }
+        }
+        
+        // 월 전환 함수
+        function changeMonth(direction) {
+            currentDisplayMonth.setMonth(currentDisplayMonth.getMonth() + direction);
+            generateCalendar();
         }
 
         function selectDate(date) {
